@@ -3,10 +3,17 @@ define([
 	'./lib/core/aspect',
 	'./lib/core/compose',
 	'./lib/core/doc',
+	'./lib/core/has',
 	'./lib/core/properties',
 	'./ready!WebComponentsReady'
-], function (exports, aspect, compose, doc, properties) {
+], function (exports, aspect, compose, doc, has, properties) {
 	'use strict';
+
+	// Does platform have native support for document.register() or a polyfill to simulate it?
+	has.add('document-register', document.register);
+
+	// Can we use __proto__ to reset the prototype of DOMNodes?
+	has.add('__proto__', Object.__proto__);
 
 	/**
 	 * A convenience variable to a function that adds a "shadow" property and value to the destination object.
@@ -26,13 +33,72 @@ define([
 	}
 
 	/**
-	 * Internal registry of custom tags
+	 * List of selectors that the parser needs to search for as possible upgrade targets.  Mainly contains
+	 * the widget custom tags like d-accordion, but also selectors like button[is='d-button'] to find <button is="...">
+	 * @type {String[]}
+	 */
+	var selectors = [];
+
+	/**
+	 * Internal registry of widget class metadata.
+	 * Key is custom widget tag name, used as Element tag name like <d-accordion> or "is" attribute like
+	 * <button is="d-accordion">).
+	 * Value is metadata about the widget, including its prototype, ex: {prototype: object, extends: "button", ... }
 	 * @type {Object}
 	 */
 	var registry = {};
 
 	/**
-	 * Register a custom element with the current document
+	 * Create an Element.  Equivalent to document.createElement(), but if tag is the name of a widget defined by
+	 * register(), then it upgrades the Element to be a widget.
+	 * @param {String} tag
+	 * @returns {Element} The DOMNode
+	 */
+	function createElement(tag){
+		// TODO: support custom document
+		var base = registry[tag] ? registry[tag].extends : null;
+		element = doc.createElement(base || tag);
+		if (base) {
+			element.setAttribute('is', tag);
+		}
+		upgrade(element);
+		return element;
+	}
+
+	/**
+	 * Converts plain DOMNode of custom type into widget, by adding the widget's custom methods, etc.
+	 * Does nothing if the DOMNode has already been converted or if it doesn't correspond to a custom widget.
+	 * (TODO: does the latter case ever happen?)
+	 * Roughly equivalent to dojo/parser::instantiate(), but for a single node, not an array
+	 * @param {Element} inElement The DOMNode
+	 */
+	function upgrade(element){
+		if (!element.__upgraded__) {
+			var widget = registry[element.getAttribute('is') || element.nodeName.toLowerCase()];
+			if (widget) {
+				if (has("__proto__")) {
+					// Easy way to redefine the Element's prototype
+					element.__proto__ = widget.prototype;
+				}
+				else{
+					// Hard way to redefine the Element's prototype, needed by IE
+					Object.defineProperties(element, widget._prototype);
+				}
+				// element.constructor = widget.constructor;
+				element.__upgraded__ = true;
+				if (element.readyCallback) {
+					element.readyCallback.call(element, widget.prototype);
+				}
+				if (element.insertedCallback && doc.documentElement.contains(element)) {
+					// TODO: doc that if apps insert an element manually they need to call insertedCallback() manually
+					element.insertedCallback.call(element, widget.prototype);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Register a custom element with the current document.
 	 * @param  {String}               tag             The custom element's tag name
 	 * @param  {HTMLElement}          baseElement     A constructor function that has HTMLElement in the prototype
 	 * @param  {Objects|Functions...} [extensions...] Any number of extensions to be built into the custom element
@@ -140,21 +206,50 @@ define([
 		}
 
 		/**
-		 * Registers the tag with the current document, handling situations where the base constructor inherits from
+		 * Registers the tag with the current document, and save tag information in registry.
+		 * Handles situations where the base constructor inherits from
 		 * HTMLElement but is not HTMLElement
-		 * @param  {String}   tag      The custom tag name for the element
+		 * @param  {String}   tag      The custom tag name for the element, or the "is" attribute value.
 		 * @param  {String}   baseName The base "class" name that this custom element is being built on
 		 * @param  {Function} baseCtor The constructor function
 		 * @return {Function}          The "new" constructor function that can create instances of the custom element
 		 */
 		function getTagConstructor(tag, baseName, baseCtor) {
-			var config = {
-				prototype: baseCtor.prototype
-			};
+			var proto = baseCtor.prototype,
+				config = registry[tag] = {
+					prototype: proto
+				};
 			if (baseName !== 'HTMLElement') {
 				config.extends = tags[baseName];
 			}
-			return doc.register(tag, config);
+
+			// If platform natively support document.register, we can call it here.
+			if (has("document-register")) {
+				// TODO: Polymer's document.register() apparently always takes two args, but the W3C spec says that it
+				// should be passed three args for extension: doc.register(config.extends, tag, config)
+				return doc.register(tag, config);
+			} else {
+
+				if(!has("__proto__")) {
+					// Get the prototype the hard way.  Data will be used by upgrade() method.
+					// Based on unwrapPrototype() from https://github.com/mozilla/web-components/blob/master/src/document.register.js.
+					// See also customMixin() in Polymer (alternate implementation).
+					var definition = config._prototype = {};
+					Object.getOwnPropertyNames(proto).forEach(function(name){
+						definition[name] = Object.getOwnPropertyDescriptor(proto, name);
+					});
+				}
+
+				// Register the selector to find this custom element
+				selectors.push( config.extends ? config.extends + '[is="' + tag + '"]' : tag);
+
+				// Note: if we wanted to support registering new types after the parser was called, then here we should
+				// scan the document for the new type (selectors[length-1]) and upgrade any nodes found.
+
+				// Create a constructor method to return a DOMNode representing this widget.
+				// TODO: argument to specify non-default document, and also initialization parameters.
+				return function(){ return createElement(tag); };
+			}
 		}
 
 		/**
@@ -197,9 +292,9 @@ define([
 		// "Hide" the current baseName
 		shadow(ctor.prototype, 'baseName', baseName);
 
-		// Assign the proper constructor to the registry and return its value
+		// Save widget metadata to the registry and return constructor that creates an upgraded DOMNode for the widget
 		/* jshint boss:true */
-		return registry[tag] = getTagConstructor(tag, baseName, ctor);
+		return getTagConstructor(tag, baseName, ctor);
 	}
 
 	/**
@@ -319,7 +414,23 @@ define([
 		};
 	}
 
+	/**
+	 * Parse the given DOM tree for any DOMNodes that need to be upgraded to widgets.
+	 * @param {Element?} Root DOMNode to parse from
+	 */
+	function parse(root){
+		if(has("document-register")){
+			// If there's native support for custom elements then they are parsed automatically
+			return;
+		}
+
+		// Otherwise, parse manually
+		(root || document).querySelectorAll(selectors).forEach(upgrade);
+	}
+
 	var widgets = {
+		parse: parse,
+		upgrade: upgrade,
 		register: register,
 		property: compose.property,
 		after: compose.after,
