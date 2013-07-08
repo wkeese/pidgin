@@ -67,7 +67,6 @@ define([
 	/**
 	 * Converts plain DOMNode of custom type into widget, by adding the widget's custom methods, etc.
 	 * Does nothing if the DOMNode has already been converted or if it doesn't correspond to a custom widget.
-	 * (TODO: does the latter case ever happen?)
 	 * Roughly equivalent to dojo/parser::instantiate(), but for a single node, not an array
 	 * @param {Element} inElement The DOMNode
 	 */
@@ -85,8 +84,8 @@ define([
 				}
 				// element.constructor = widget.constructor;
 				element.__upgraded__ = true;
-				if (element.readyCallback) {
-					element.readyCallback.call(element, widget.prototype);
+				if (element.createdCallback) {
+					element.createdCallback.call(element, widget.prototype);
 				}
 				if (element.insertedCallback && doc.documentElement.contains(element)) {
 					// TODO: doc that if apps insert an element manually they need to call insertedCallback() manually
@@ -224,8 +223,6 @@ define([
 
 			// If platform natively support document.register, we can call it here.
 			if (has("document-register")) {
-				// TODO: Polymer's document.register() apparently always takes two args, but the W3C spec says that it
-				// should be passed three args for extension: doc.register(config.extends, tag, config)
 				return doc.register(tag, config);
 			} else {
 
