@@ -4,8 +4,7 @@ define([
 	'./lib/core/compose',
 	'./lib/core/doc',
 	'./lib/core/has',
-	'./lib/core/properties',
-	'./ready!WebComponentsReady'
+	'./lib/core/properties'
 ], function (exports, aspect, compose, doc, has, properties) {
 	'use strict';
 
@@ -56,8 +55,8 @@ define([
 	 */
 	function createElement(tag){
 		// TODO: support custom document
-		var base = registry[tag] ? registry[tag].extends : null;
-		element = doc.createElement(base || tag);
+		var base = registry[tag] ? registry[tag].extends : null,
+			element = doc.createElement(base || tag);
 		if (base) {
 			element.setAttribute('is', tag);
 		}
@@ -425,7 +424,10 @@ define([
 		}
 
 		// Otherwise, parse manually
-		(root || document).querySelectorAll(selectors).forEach(upgrade);
+		var node, idx = 0, nodes = (root || doc).querySelectorAll(selectors);
+		while(node = nodes[idx++]){
+			upgrade(node);
+		}
 	}
 
 	var widgets = {

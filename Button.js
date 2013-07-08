@@ -1,8 +1,8 @@
 define([
-	'./tmpl',
+	// './tmpl',   // comment out for now, templates not implemented yet
 	'./widgets',
 	'./_Widget'
-], function (tmpl, widgets, _Widget) {
+], function (/* tmpl, */ widgets, _Widget) {
 	'use strict';
 
 	/**
@@ -12,7 +12,7 @@ define([
 	 */
 
 	var after = widgets.after,
-		template = tmpl('pd-button-template', '<span class="pd-label">{{ label }}</span>');
+		template = null	// tmpl('pd-button-template', '<span class="pd-label">{{ label }}</span>'); commented out until templates supported
 
 	/**
 	 * The constructor for pidgin/Button and tag pd-button

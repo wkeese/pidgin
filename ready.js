@@ -18,13 +18,6 @@ define([
 				ready: function () {
 					return doc.readyState === 'complete' || doc.readyState === 'loaded';
 				}
-			},
-			WebComponentsReady: {
-				target: doc,
-				ready: function () {
-					/* global CustomElements */
-					return CustomElements && CustomElements.ready;
-				}
 			}
 		};
 

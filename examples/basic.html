@@ -30,7 +30,7 @@
 		'pidgin/Button',  // The button class
 		'pidgin/widgets',  // The pidgin widget utility module
 		'core/dom',  // A dom manipulation library
-		'pidgin/tmpl!./examples/resources/ListWidget.html'  // The MDV Template for the List Widget
+		//'pidgin/tmpl!./examples/resources/ListWidget.html'  // The MDV Template for the List Widget
 	], function (_Widget, Button, widgets, dom, tmplListWidget) {
 
 		/* "Tailoring" a unordered list widget, template binds and iterates over items. */
@@ -57,6 +57,9 @@
 		/* Using the place functionality */
 		list1.place(document.body);
 
+		/* Create the buttons (unless browser has native custom element support, in which case they were already created) */
+		widgets.parse();
+
 		/* Retrieve a reference to the button... The Widget is the Node the Node is the Widget!!! */
 		var button1 = dom.get('button1');
 
@@ -66,12 +69,8 @@
 			listener: function () {
 				/* Just reordering things... */
 				list1.items.push(list1.items.shift());
-				Platform.performMicrotaskCheckpoint();
 			}
 		});
-
-		/* needed for browsers without Object.observe() */
-		Platform.performMicrotaskCheckpoint();
 	});
 	</script>
 </head>
